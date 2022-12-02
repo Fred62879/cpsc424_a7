@@ -7,80 +7,29 @@ function subdivider (input_mesh) {
     this.new_faces = [];
     this.new_vertices = [];
     this.old_vertices = [];
-    this.vertex_map = new Map();
 
     // Initializes this subdivision object with a mesh to use as
     // the control mesh (ie: subdivision level 0).
     this.meshes.push(input_mesh);
 
-    this.vertex_to_array = function (vertices) {
-        for (var i = 0; i < vertices.length; i++) {
-            var vertex = vertices[i];
-            var pos = vertex.getPos();
-            vertices[i] = [pos.x(),pos.y(),pos.z()];
-        }
-    }
-
-    this.add_vertex = function(origin, end) {
-        var id1 = origin.getId();
-        var id2 = end.getId();
-        if (id1 > id2) [id1, id2] = [id2, id1];
-        var key = String(id1) + "," + String(id2);
-
-        if (this.vertex_map.has(key))
-            return this.vertex_map.get(key);
+    this.split_edge = function (he) {
+        var origin = he.getOrigin();
+        var end = he.getNext().getOrigin();
+        var prev = he.getPrev();
+        var next = he.getNext();
 
         var pos1 = origin.getPos();
         var pos2 = end.getPos();
         var new_x = (pos1.value[0] + pos2.value[0])/2;
         var new_y = (pos1.value[1] + pos2.value[1])/2;
-        var new_z = (pos1.value[2] + pos2.value[2])/2;
+        var new_z = (pos1.value[1] + pos2.value[2])/2;
 
-        var id = this.old_vertices.length + this.new_vertices.length;
-        var vertex = new Vertex(new_x, new_y, new_z, id);
-
-        this.new_vertices.push(vertex);
-        this.vertex_map.set(key, vertex);
-        return vertex;
-    }
-
-    this.add_edge = function (origin_id, id) {
-        var origin = this.new_edges[origin_id].getOrigin();
-        var edge = new HalfEdge(id);
-        edge.setOrigin(origin);
-        this.new_edges.push(edge);
-        return edge;
-    }
-
-    this.link_edges = function (edge1, edge2, edge3) {
-        edge1.setNext(edge2);edge2.setPrev(edge1);
-        edge2.setNext(edge3);edge3.setPrev(edge2);
-        edge3.setNext(edge1);edge1.setPrev(edge3);
-    }
-
-    this.add_face = function(edge) {
-        var edge1 = edge;
-        var edge2 = edge.getNext();
-        var edge3 = edge.getPrev();
-        var new_face = [[edge1.getOrigin().getId()],
-                        [edge2.getOrigin().getId()],
-                        [edge3.getOrigin().getId()]];
-        this.new_faces.push(new_face);
-    }
-
-    this.split_edge = function (he) {
-        var origin = he.getOrigin();
-        var end = he.getNext().getOrigin();
-        var new_vertex = this.add_vertex(origin, end);
-
-        var prev = he.getPrev();
-        var next = he.getNext();
+        var vertex_id = this.old_vertices.length + this.new_vertices.length;
         var edge_id = this.new_edges.length;
 
+        var new_vertex = new Vertex(new_x, new_y, new_z, vertex_id);
         var new_he1 = new HalfEdge(edge_id);
         var new_he2 = new HalfEdge(edge_id + 1);
-        this.new_edges.push(new_he1);
-        this.new_edges.push(new_he2);
 
         new_he1.setOrigin(new_vertex);
         new_he2.setOrigin(origin);
@@ -89,28 +38,46 @@ function subdivider (input_mesh) {
         new_he1.setNext(next);
         new_he2.setPrev(prev);
         new_he2.setNext(new_he1);
-        prev.setNext(new_he2);
-        next.setPrev(new_he1);
+        prev.next.setNext(new_he2);
+        next.prev.setPrev(new_he1);
+
+        this.new_vertices.push(new_vertex);
+        this.new_edges.push(new_he1);
+        this.new_edges.push(new_he2);
+    }
+
+    this.set_face = function(id1, id2, new_edge) {
+        this.new_edges[id1].setNext(new_edge);
+        new_edge.setNext(this.new_edges[id2]);
+        this.new_edges[id2].setPrev(new_edge);
+        new_edge.setPrev(this.new_edges[id1]);
+        var new_face = new Face();
+        new_face.setEdge(new_edge);
+
+        this.new_edges.push(new_edge);
+        this.new_faces.push(new_face);
     }
 
     // cut a face based on 6 half-edges created during split for one face
     this.cut_a_face = function (id_lo) {
         var new_id_lo = this.new_edges.length;
 
-        var edge1 = this.add_edge(id_lo + 4, new_id_lo);
-        var edge2 = this.add_edge(id_lo,     new_id_lo + 1);
-        var edge3 = this.add_edge(id_lo + 2, new_id_lo + 2);
-        this.link_edges(edge1, this.new_edges[id_lo], this.new_edges[id_lo+5]);
-        this.link_edges(edge2, this.new_edges[id_lo+2], this.new_edges[id_lo+1]);
-        this.link_edges(edge3, this.new_edges[id_lo+4], this.new_edges[id_lo+3]);
-        this.add_face(edge1);this.add_face(edge2);this.add_face(edge3);
+        var origin = this.new_edges[id_lo+1].getOrigin();
+        var new_edge1 = new HalfEdge(new_id_lo);
+        new_edge1.setOrigin(origin);
 
-        // twin edges of the three new edges above
-        var edge1t = this.add_edge(id_lo,     new_id_lo + 3);
-        var edge2t = this.add_edge(id_lo + 4, new_id_lo + 4);
-        var edge3t = this.add_edge(id_lo + 2, new_id_lo + 5);
-        this.link_edges(edge1t, edge2t, edge3t);
-        this.add_face(edge1t);
+        var origin = this.new_edges[id_lo+3].getOrigin();
+        var new_edge2 = new HalfEdge(new_id_lo + 1);
+        new_edge2.setOrigin(origin);
+
+        var origin = this.new_edges[id_lo+5].getOrigin();
+        var new_edge3 = new HalfEdge(new_id_lo + 2);
+        new_edge3.setOrigin(origin);
+
+        // set up faces properly
+        this.set_face(id_lo, id_lo+5, new_edge1);
+        this.set_face(id_lo+2, id_lo+1, new_edge2);
+        this.set_face(id_lo+4, id_lo+3, new_edge3);
     }
 
     this.subdivide_one_level = function(prev_level) {
@@ -121,8 +88,8 @@ function subdivider (input_mesh) {
         // so 6 resulting half-edges will be consecutive
         faces.forEach((face) => {
             var edge1 = face.getEdge();
-            var edge2 = edge1.getPrev();
-            var edge3 = edge1.getNext();
+            var edge2 = edge1.getNext();
+            var edge3 = edge1.getPrev();
             this.split_edge(edge1);
             this.split_edge(edge2);
             this.split_edge(edge3);
@@ -139,12 +106,14 @@ function subdivider (input_mesh) {
         // create new mesh
         console.log('creat new mesh');
         var vertices = this.old_vertices.concat(this.new_vertices);
-        this.vertex_to_array(vertices);
         var new_mesh = new Mesh();
+        console.log(vertices);
+        console.log(this.new_faces);
         new_mesh.builMesh(vertices, [], this.new_faces);
         new_mesh.computeNormal();
         console.log('add new mesh');
         this.meshes.push(new_mesh);
+        console.log(this.meshes);
     }
 
     this.subdivide = function (level) {
@@ -168,6 +137,7 @@ function subdivider (input_mesh) {
                 this.create_new_mesh();
             }
         }
+        console.log('*');
         console.log(this.meshes);
         return this.meshes[level];
         // console.log(this.meshes[0].getFaces().length);
@@ -181,10 +151,5 @@ function subdivider (input_mesh) {
 
     this.clear = function (m) {
         this.meshes = [];
-        this.new_edges = [];
-        this.new_faces = [];
-        this.new_vertices = [];
-        this.old_vertices = [];
-        this.vertex_map = new Map();
     }
 }
