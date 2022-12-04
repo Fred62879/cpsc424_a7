@@ -33,22 +33,29 @@ function subdivider (input_mesh) {
     this.calculate_old_vertex_pos = function(v) {
         var edges = v.getEdges();
         var n = edges.length;
-        var alpha = this.get_alpha(n);
-        var alpha_n = alpha / n;
+
+        var u = 0;
+        if (n == 3) u = 3/16;
+        else u = 3/8*n;
+        console.log(u);
+
+        // var alpha = this.get_alpha(n);
+        // var alpha_n = alpha / n;
+
         var vertices = v.getVertices();
         var new_x = 0; var new_y = 0; var new_z = 0;
 
         for (var i = 0; i < this.valence; i++) {
-            new_x += alpha_n * vertices[i].getPos().x();
-            new_y += alpha_n * vertices[i].getPos().y();
-            new_z += alpha_n * vertices[i].getPos().z();
+            new_x += u * vertices[i].getPos().x();
+            new_y += u * vertices[i].getPos().y();
+            new_z += u * vertices[i].getPos().z();
             // new_x += vertices[i].getPos().x();
             // new_y += vertices[i].getPos().y();
             // new_z += vertices[i].getPos().z();
         }
-        new_x += (1 - alpha) * v.getPos().x();
-        new_y += (1 - alpha) * v.getPos().y();
-        new_z += (1 - alpha) * v.getPos().z();
+        new_x += (1 - u) * v.getPos().x();
+        new_y += (1 - u) * v.getPos().y();
+        new_z += (1 - u) * v.getPos().z();
         // new_x = (new_x + w_n * v.getPos().x()) / (this.w_n + this.valence);
         // new_y = (new_y + w_n * v.getPos().y()) / (this.w_n + this.valence);
         // new_z = (new_z + w_n * v.getPos().z()) / (this.w_n + this.valence);
@@ -68,6 +75,9 @@ function subdivider (input_mesh) {
         var new_x = (3*pos1.x() + 3*pos2.x() + pos3.x() + pos4.x()) / 8;
         var new_y = (3*pos1.y() + 3*pos2.y() + pos3.y() + pos4.y()) / 8;
         var new_z = (3*pos1.z() + 3*pos2.z() + pos3.z() + pos4.z()) / 8;
+        // var new_x = (pos1.x() + pos2.x()) / 2;
+        // var new_y = (pos1.y() + pos2.y()) / 2;
+        // var new_z = (pos1.z() + pos2.z()) / 2;
 
         return [new_x,new_y,new_z];
     }
@@ -194,11 +204,10 @@ function subdivider (input_mesh) {
     }
 
     this.finalize_vertices = function () {
-        for (var i = 0; i < this.old_vertices.length; i++) {
-            var pos = this.old_vertices_updated[i];
-            this.old_vertices[i].setPos(pos[0],pos[1],pos[2]);
-        }
-        // var vertices = old_vertices_updated.concat(this.new_vertices);
+        // for (var i = 0; i < this.old_vertices.length; i++) {
+        //     var pos = this.old_vertices_updated[i];
+        //     this.old_vertices[i].setPos(pos[0],pos[1],pos[2]);
+        // }
         var vertices = this.old_vertices.concat(this.new_vertices);
         this.vertex_to_array(vertices);
         return vertices;
@@ -236,32 +245,16 @@ function subdivider (input_mesh) {
         return 1/64 * (40 - (3 + 2 * Math.cos(2* Math.PI / n))^2 );
     }
 
-    this.get_valence = function() {
-        this.valence = 0;
-        var e = this.meshes[0].getEdges()[0];
-
-        while (e.getFlag() != "VMarked") {
-            e.setFlag("VMarked");
-            e = e.getTwin().getPrev();
-            this.valence += 1;
-        }
-
-        alpha = 1/64 * (40 - (3 + 2 * Math.cos(2* Math.PI / this.valence))^2 );
-        alpha_n = alpha / this.valence;
-        w_n = 64 * this.valence / (40 - (3 + 2 * Math.cos(2* Math.PI / this.valence))^2 )
-            - this.valence;
-    }
-
     this.setMesh = function (mesh) {
         this.clear(mesh);
         this.meshes.push(mesh);
-        // this.get_valence();
     }
 
     this.init = function (level) {
         this.new_edges = [];
         this.new_faces = [];
         this.new_vertices = [];
+        this.old_vertices_updated = [];
         this.old_vertices = this.meshes[level].getVertices();
         // pre-compute udpated position for old vertices
         this.old_vertices.forEach((v) => {
